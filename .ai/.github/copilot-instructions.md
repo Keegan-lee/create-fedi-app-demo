@@ -1,0 +1,8 @@
+# {{PROJECT_NAME}} — GitHub Copilot Context
+
+This is a Fedi Mini App built with create-fedi-app.
+Full context is in `.ai/rules/`. Read OVERVIEW.md first.
+
+Key constraint: this app runs inside Fedi's in-app browser (WebView).
+window.webln and window.nostr are injected by Fedi — do not install
+external wallet libraries. Always check for undefined before calling them.
