@@ -1,6 +1,7 @@
 import type {
   WebLNProvider,
   GetInfoResponse,
+  GetBalanceResponse,
   RequestInvoiceArgs,
   RequestInvoiceResponse,
   SendPaymentResponse,
@@ -63,8 +64,13 @@ export class MockWebLNProvider implements WebLNProvider {
         pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
         color: '#FF6B35',
       },
-      methods: ['sendPayment', 'makeInvoice', 'getInfo', 'signMessage'],
+      methods: ['sendPayment', 'makeInvoice', 'getInfo', 'signMessage', 'getBalance'],
     };
+  }
+
+  async getBalance(): Promise<GetBalanceResponse> {
+    await delay(this.paymentDelay);
+    return { balance: 42_069, currency: 'sats' };
   }
 
   async makeInvoice(args: RequestInvoiceArgs | string | number): Promise<RequestInvoiceResponse> {

@@ -36,6 +36,33 @@ export default function LnurlDemoPage() {
 
         <PaymentCallout className="mb-8" />
 
+        <div
+          className="mb-8 space-y-2 rounded-lg px-4 py-3 text-xs leading-[1.65]"
+          style={{
+            background: 'var(--color-surface-1)',
+            border: '1px solid var(--color-border)',
+            color: 'var(--color-text-muted)',
+            borderRadius: 'var(--radius-lg)',
+          }}
+        >
+          <p className="font-semibold text-[var(--color-text)]">How to test these flows</p>
+          <p>
+            <strong className="text-[var(--color-text)]">Pay & withdraw</strong> use the wallet
+            injected by Fedi (<code className="font-mono">window.webln</code>) and{' '}
+            <strong className="text-[var(--color-text)]">auth</strong> uses{' '}
+            <code className="font-mono">window.nostr</code> — open this mini app{' '}
+            <strong className="text-[var(--color-text)]">inside Fedi</strong> so the Complete login and
+            Simulate withdraw buttons can sign. In a plain browser the dev mocks fill in, but real
+            signing needs Fedi.
+          </p>
+          <p>
+            The QR codes encode callbacks on <em>this</em> deployment. For an external wallet to scan
+            and reach them, the app must be on a public HTTPS URL — set{' '}
+            <code className="font-mono">LNURL_SERVER_URL</code> to that origin (e.g. your Vercel or
+            tunnel URL) so the encoded callback isn&apos;t <code className="font-mono">localhost</code>.
+          </p>
+        </div>
+
         <div className="space-y-8">
           <section className="space-y-4">
             <div className="max-w-[75ch] space-y-1.5">

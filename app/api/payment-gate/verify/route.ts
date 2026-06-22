@@ -24,16 +24,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: result.reason }, { status: 402 });
   }
 
-  if (result.record.contentId !== contentId) {
+  if (result.contentId !== contentId) {
     return NextResponse.json({ error: 'Content mismatch' }, { status: 403 });
   }
 
   const response = NextResponse.json({
     ok: true,
-    contentId: result.record.contentId,
-    paidAt: result.record.paidAt,
+    contentId: result.contentId,
+    amountSats: result.amountSats,
   });
 
-  setPaymentCookie(response, contentId, paymentId);
+  setPaymentCookie(response, contentId);
   return response;
 }

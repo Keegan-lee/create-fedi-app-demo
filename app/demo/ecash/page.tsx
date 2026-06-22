@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { BalanceDisplay } from '../../../components/fedi/BalanceDisplay';
+import { WalletBalance } from '../../../components/fedi/WalletBalance';
 import { FediVersionBadge } from '../../../components/fedi/FediVersionBadge';
 import type { IInstallMiniAppProps } from '../../../components/fedi/InstallMiniAppButton';
 
@@ -42,13 +43,27 @@ export default function EcashDemoPage() {
             Ecash &amp; Fedi API
           </h1>
           <p className="max-w-[75ch] text-sm leading-[1.65] text-[var(--color-text-muted)]">
-            Reads <code className="font-mono text-xs">window.fediInternal</code> for versioned mini
-            app discovery. Unlike WebLN and Nostr, this API is optional. Older Fedi builds may not
-            expose it.
+            Read your active wallet balance over WebLN, and use{' '}
+            <code className="font-mono text-xs">window.fediInternal</code> for versioned mini app
+            discovery. Both degrade gracefully — older Fedi builds may not expose them.
           </p>
         </header>
 
         <div className="space-y-8">
+          <section className="space-y-4">
+            <div className="max-w-[75ch] space-y-1.5">
+              <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold leading-tight tracking-tight text-[var(--color-text)]">
+                Ecash &amp; wallet balance
+              </h2>
+              <p className="text-sm leading-[1.65] text-[var(--color-text-muted)]">
+                Fedi bridges your wallet to the standard WebLN{' '}
+                <code className="font-mono text-xs">getBalance()</code> call. You see the balance of
+                your active federation — read on for what that means across federations.
+              </p>
+            </div>
+            <WalletBalance />
+          </section>
+
           <section className="space-y-4">
             <div className="max-w-[75ch] space-y-1.5">
               <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold leading-tight tracking-tight text-[var(--color-text)]">

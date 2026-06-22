@@ -35,6 +35,13 @@ export interface GetInfoResponse {
   methods: string[];
 }
 
+export interface GetBalanceResponse {
+  /** Spendable balance in the wallet's active account. */
+  balance: number;
+  /** Currency/unit of `balance`, e.g. "sats" or "BTC". Defaults to sats when omitted. */
+  currency?: string;
+}
+
 export interface WebLNProvider {
   enable(): Promise<void>;
   getInfo(): Promise<GetInfoResponse>;
@@ -43,6 +50,12 @@ export interface WebLNProvider {
   signMessage(message: string): Promise<SignMessageResponse>;
   verifyMessage(signature: string, message: string): Promise<void>;
   sendKeysend(args: KeysendArgs): Promise<SendPaymentResponse>;
+  /**
+   * Optional WebLN extension. Not all wallets implement it; check
+   * `getInfo().methods` for "getBalance" (and feature-detect the function)
+   * before calling. Fedi exposes the active wallet/federation balance here.
+   */
+  getBalance?(): Promise<GetBalanceResponse>;
 }
 
 // Nostr types

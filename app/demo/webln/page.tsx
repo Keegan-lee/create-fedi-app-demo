@@ -69,11 +69,12 @@ export default function WeblnDemoPage() {
           <section className="space-y-4">
             <div className="max-w-[75ch] space-y-1.5">
               <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold leading-tight tracking-tight text-[var(--color-text)]">
-                Receive payment
+                Generate Invoice to Pay
               </h2>
               <p className="text-sm leading-[1.65] text-[var(--color-text-muted)]">
                 Tap create invoice to call <code className="font-mono text-xs">makeInvoice()</code>.
-                Scan the QR code or copy the invoice string to pay.
+                This produces a BOLT11 request you (or someone else) can pay — scan the QR code, copy
+                the string, or pay it from the section below.
               </p>
             </div>
             <InvoiceCard

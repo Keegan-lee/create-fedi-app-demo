@@ -69,7 +69,8 @@ export default function NostrDemoPage() {
               <p className="text-sm leading-[1.65] text-[var(--color-text-muted)]">
                 Signs a kind-1 text note via{' '}
                 <code className="font-mono text-xs">signEvent()</code>. The returned JSON includes a
-                Schnorr signature anyone can verify.
+                Schnorr signature anyone can verify — then broadcast it to public relays and view it
+                live on njump.me.
               </p>
             </div>
             <SignedMessage />

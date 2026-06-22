@@ -4,12 +4,7 @@ import { getPaymentHashFromInvoice } from './lightning/bolt11';
 import { createLnurlPayInvoice } from './lightning/lnurl-pay';
 import { verifyPreimage } from './lightning/preimage-verify';
 import { getDemoGateSats, getLnurlPayAddress } from './payment-config';
-import {
-  createPaymentRecord,
-  getPaymentById,
-  markPaymentPaid,
-  type TPaymentRecord,
-} from './payment-store';
+import { createPaymentRecord, markPaymentPaid } from './payment-store';
 
 export const PAYMENT_COOKIE_NAME = 'fedi-payment-token';
 export const PAYMENT_COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
@@ -30,34 +25,44 @@ function signPayload(payload: string): string {
   return createHmac('sha256', getSigningSecret()).update(payload).digest('hex');
 }
 
-function buildToken(contentId: string, paymentId: string): string {
-  const payload = `${contentId}:${paymentId}`;
-  return `${payload}:${signPayload(payload)}`;
-}
-
-function parseToken(token: string, contentId: string): string | null {
-  const parts = token.split(':');
-  if (parts.length < 3) return null;
-
-  const paymentId = parts[1];
-  const signature = parts.slice(2).join(':');
-  const payload = `${contentId}:${paymentId}`;
-  const expected = signPayload(payload);
-
+/** Constant-time comparison of two hex signatures. */
+function signatureMatches(signature: string, expected: string): boolean {
   try {
     const sigBuffer = Buffer.from(signature, 'hex');
     const expectedBuffer = Buffer.from(expected, 'hex');
-    if (
-      sigBuffer.length !== expectedBuffer.length ||
-      !timingSafeEqual(sigBuffer, expectedBuffer)
-    ) {
-      return null;
-    }
+    return (
+      sigBuffer.length === expectedBuffer.length &&
+      timingSafeEqual(sigBuffer, expectedBuffer)
+    );
   } catch {
-    return null;
+    return false;
   }
+}
 
-  return paymentId;
+// ---------------------------------------------------------------------------
+// Access cookie (stateless)
+//
+// The whole gate is intentionally stateless: a valid, HMAC-signed cookie *is*
+// the proof of payment. It is only ever issued after the server verifies a real
+// Lightning preimage (see `verifyPayment`), and it is HttpOnly so client code
+// can't forge it. Because nothing here reads server memory, the gate survives
+// serverless cold starts, multiple instances, and the user returning days later
+// — which is exactly where an in-memory store silently fails.
+// ---------------------------------------------------------------------------
+
+function buildAccessToken(contentId: string): string {
+  return `${contentId}:${signPayload(`access:${contentId}`)}`;
+}
+
+function isValidAccessToken(token: string, contentId: string): boolean {
+  const idx = token.lastIndexOf(':');
+  if (idx < 0) return false;
+
+  const tokenContentId = token.slice(0, idx);
+  const signature = token.slice(idx + 1);
+  if (tokenContentId !== contentId) return false;
+
+  return signatureMatches(signature, signPayload(`access:${contentId}`));
 }
 
 function readPaymentToken(source: NextRequest | TCookieReader): string | null {
@@ -73,7 +78,8 @@ function readPaymentToken(source: NextRequest | TCookieReader): string | null {
 }
 
 /**
- * Reads payment tokens from request cookies or the x-payment-token header.
+ * Validates the signed access cookie (or `x-payment-token` header) for a content id.
+ * Stateless: a valid signature is sufficient proof of a completed payment.
  */
 export function checkPaymentCookie(
   source: NextRequest | TCookieReader,
@@ -81,37 +87,27 @@ export function checkPaymentCookie(
 ): boolean {
   const token = readPaymentToken(source);
   if (!token) return false;
-
-  const paymentId = parseToken(token, contentId);
-  if (!paymentId) return false;
-
-  return true;
+  return isValidAccessToken(token, contentId);
 }
 
 /**
- * Validates the token and confirms the underlying payment record is paid.
+ * Confirms access to gated content. Identical to {@link checkPaymentCookie};
+ * kept as a separate async export so server components and the proxy can share
+ * one intent-revealing name. Swap in a database lookup here if you need to
+ * support revocation or refunds.
  */
 export async function checkPaymentAccess(
   source: NextRequest | TCookieReader,
   contentId: string,
 ): Promise<boolean> {
-  const token = readPaymentToken(source);
-  if (!token) return false;
-
-  const paymentId = parseToken(token, contentId);
-  if (!paymentId) return false;
-
-  const record = await getPaymentById(paymentId);
-  return record?.contentId === contentId && record.status === 'paid';
+  return checkPaymentCookie(source, contentId);
 }
 
 export function setPaymentCookie(
   response: NextResponse,
   contentId: string,
-  paymentId: string,
 ): NextResponse {
-  const token = buildToken(contentId, paymentId);
-  response.cookies.set(PAYMENT_COOKIE_NAME, token, {
+  response.cookies.set(PAYMENT_COOKIE_NAME, buildAccessToken(contentId), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
@@ -119,6 +115,45 @@ export function setPaymentCookie(
     maxAge: PAYMENT_COOKIE_MAX_AGE,
   });
   return response;
+}
+
+// ---------------------------------------------------------------------------
+// Pending payment token (stateless)
+//
+// Returned to the client as `paymentId`. It carries the invoice payment hash
+// (and amount/content) inside an HMAC-signed envelope, so `verifyPayment` can
+// validate the preimage on *any* instance without sharing memory with the
+// instance that created the invoice. A record is also written to the in-memory
+// store, but only for demonstration — verification never depends on reading it.
+// ---------------------------------------------------------------------------
+
+type TPendingPayload = {
+  contentId: string;
+  paymentHash: string;
+  amountSats: number;
+  recordId?: string;
+};
+
+function buildPendingToken(payload: TPendingPayload): string {
+  const data = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  return `${data}.${signPayload(data)}`;
+}
+
+function parsePendingToken(token: string): TPendingPayload | null {
+  const idx = token.lastIndexOf('.');
+  if (idx < 0) return null;
+
+  const data = token.slice(0, idx);
+  const signature = token.slice(idx + 1);
+  if (!signatureMatches(signature, signPayload(data))) return null;
+
+  try {
+    const parsed = JSON.parse(Buffer.from(data, 'base64url').toString()) as TPendingPayload;
+    if (!parsed.contentId || !parsed.paymentHash) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 export type TGenerateInvoiceResult = {
@@ -129,7 +164,8 @@ export type TGenerateInvoiceResult = {
 };
 
 /**
- * Creates a real LNURL-pay invoice and stores a pending payment record.
+ * Creates a real LNURL-pay invoice and returns a signed, self-describing
+ * `paymentId` that the verify endpoint can validate without shared state.
  */
 export async function generateInvoice(options: {
   contentId: string;
@@ -143,56 +179,63 @@ export async function generateInvoice(options: {
   const { invoice } = await createLnurlPayInvoice(lnurlAddress, amountSats, memo);
   const paymentHash = getPaymentHashFromInvoice(invoice);
 
-  const record = await createPaymentRecord({
+  // Best-effort persistence for the demo's "swap in your database" story.
+  // Never gates access — the signed token below is the source of truth.
+  let recordId: string | undefined;
+  try {
+    const record = await createPaymentRecord({
+      contentId: options.contentId,
+      invoice,
+      paymentHash,
+      amountSats,
+      memo,
+    });
+    recordId = record.id;
+  } catch {
+    recordId = undefined;
+  }
+
+  const paymentId = buildPendingToken({
     contentId: options.contentId,
-    invoice,
     paymentHash,
     amountSats,
-    memo,
+    recordId,
   });
 
-  return {
-    paymentId: record.id,
-    invoice: record.invoice,
-    amountSats: record.amountSats,
-    memo: record.memo,
-  };
+  return { paymentId, invoice, amountSats, memo };
 }
 
 export type TVerifyPaymentResult =
-  | { valid: true; record: TPaymentRecord }
+  | { valid: true; contentId: string; amountSats: number }
   | { valid: false; reason: string };
 
 /**
- * Verifies a Lightning payment preimage against the invoice payment hash.
+ * Verifies a Lightning payment preimage against the payment hash carried in the
+ * signed `paymentId` token. Fully stateless and serverless-safe.
  */
 export async function verifyPayment(
   paymentId: string,
   preimage: string,
 ): Promise<TVerifyPaymentResult> {
-  const record = await getPaymentById(paymentId);
-  if (!record) {
-    return { valid: false, reason: 'Payment not found' };
+  const payload = parsePendingToken(paymentId);
+  if (!payload) {
+    return { valid: false, reason: 'Invalid or tampered payment token' };
   }
 
-  if (record.status === 'expired') {
-    return { valid: false, reason: 'Invoice expired' };
-  }
-
-  if (record.status === 'paid') {
-    return { valid: true, record };
-  }
-
-  if (!verifyPreimage(preimage, record.paymentHash)) {
+  if (!verifyPreimage(preimage, payload.paymentHash)) {
     return { valid: false, reason: 'Invalid payment proof' };
   }
 
-  const paid = await markPaymentPaid(paymentId);
-  if (!paid) {
-    return { valid: false, reason: 'Unable to confirm payment' };
+  // Best-effort: mark the demo record paid if it still lives on this instance.
+  if (payload.recordId) {
+    try {
+      await markPaymentPaid(payload.recordId);
+    } catch {
+      // Ignore — the store is illustrative, not authoritative.
+    }
   }
 
-  return { valid: true, record: paid };
+  return { valid: true, contentId: payload.contentId, amountSats: payload.amountSats };
 }
 
 export function findProtectedRoute(pathname: string) {

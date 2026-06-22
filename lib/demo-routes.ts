@@ -19,7 +19,7 @@ export const demoRoutes: IDemoRoute[] = [
   {
     href: '/demo/ecash',
     title: 'Ecash Balance',
-    description: 'fediInternal mini-app discovery, list, and install prompts.',
+    description: 'Read your wallet balance over WebLN plus fediInternal mini-app discovery.',
   },
   {
     href: '/demo/payment-gated',

@@ -5,17 +5,23 @@ export type TLnurlMetadataItem = [string, string];
 
 /**
  * Encodes a URL as an uppercase bech32 LNURL string (BIP-173, HRP `lnurl`).
+ *
+ * The `false` limit disables bech32's default 90-character cap. LNURL callback
+ * URLs (host + path + query) routinely exceed that once deployed behind a real
+ * domain or tunnel, and `encodeFromBytes` would otherwise throw "Exceeds length
+ * limit" — silently breaking LNURL-auth and LNURL-withdraw outside localhost.
  */
 export function encodeLnurl(url: string): string {
   const bytes = new TextEncoder().encode(url);
-  return bech32.encodeFromBytes('lnurl', bytes).toUpperCase();
+  return bech32.encode('lnurl', bech32.toWords(bytes), false).toUpperCase();
 }
 
 /**
  * Decodes a bech32 LNURL string back to the underlying HTTPS URL.
+ * Passes `false` to lift the 90-character limit (see {@link encodeLnurl}).
  */
 export function decodeLnurl(lnurl: string): string {
-  const { words } = bech32.decode(lnurl.toLowerCase());
+  const { words } = bech32.decode(lnurl.toLowerCase(), false);
   const bytes = bech32.fromWords(words);
   return new TextDecoder().decode(bytes);
 }
